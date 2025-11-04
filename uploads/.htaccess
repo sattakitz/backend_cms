@@ -1,0 +1,4 @@
+# Protect uploads from code execution
+<FilesMatch "\.(php|phtml|php3|php4|php5|phps)$">
+Deny from all
+</FilesMatch>

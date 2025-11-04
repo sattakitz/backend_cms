@@ -1,0 +1,40 @@
+<?php
+require_once __DIR__ . '/../helpers.php';
+if (is_logged_in()) header('Location: dashboard.php');
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = $_POST['username'] ?? '';
+    $password = $_POST['password'] ?? '';
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ?');
+    $stmt->execute([$username]);
+    $user = $stmt->fetch();
+    if ($user && $password === $user['password']) {
+        // login สำเร็จ
+        unset($user['password']);
+        $_SESSION['user'] = $user;
+        header('Location: dashboard.php');
+        exit;
+    } else {
+        $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+    }
+}
+?>
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Login</title>
+</head>
+
+<body>
+    <h2>Login</h2>
+    <?php if ($error): ?><p style="color:red"><?php echo e($error); ?></p><?php endif; ?>
+    <form method="post">
+        <label>Username: <input name="username"></label><br>
+        <label>Password: <input name="password" type="password"></label><br>
+        <button>Login</button>
+    </form>
+</body>
+
+</html>
