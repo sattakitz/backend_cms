@@ -62,5 +62,5 @@ function validate_and_move_upload($file, $destDir)
 
 function secure_session_regen()
 {
-    // session_regenerate_id(true);
+    session_regenerate_id(true);
 }

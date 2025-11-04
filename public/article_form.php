@@ -1,7 +1,41 @@
 <?php
+// แก้ไข: เพิ่ม require_once และ require_login() เพื่อความปลอดภัยและการเข้าถึง $pdo
+require_once __DIR__ . '/../helpers.php';
+require_login();
+
+// เตรียมตัวแปรสำหรับการแก้ไขหรือเพิ่มใหม่
+$id = (int)($_GET['id'] ?? 0);
+$editing = false;
+$article = ['title' => '', 'content' => '', 'category' => '', 'tags' => '', 'image' => null];
+$sites = $pdo->query('SELECT id, name FROM sites ORDER BY name')->fetchAll();
+$selectedSites = [];
+$config = require __DIR__ . '/../config.php'; // กำหนด $config สำหรับใช้แสดงรูปภาพ
+
+if ($id) {
+    $editing = true;
+    // ดึงข้อมูลบทความ
+    $stmt = $pdo->prepare('SELECT * FROM articles WHERE id = ?');
+    $stmt->execute([$id]);
+    $fetchedArticle = $stmt->fetch();
+    if (!$fetchedArticle) {
+        header('Location: articles_list.php');
+        exit;
+    }
+    $article = $fetchedArticle;
+
+    // ดึงเว็บไซต์ที่เลือกไว้
+    $stmt = $pdo->prepare('SELECT site_id FROM article_site WHERE article_id = ?');
+    $stmt->execute([$id]);
+    $selectedSites = $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
 
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // แก้ไข: เพิ่ม CSRF check
+    if (!check_csrf($_POST['csrf'] ?? '')) {
+        die('CSRF validation failed.');
+    }
+
     $title = $_POST['title'] ?? '';
     $content = $_POST['content'] ?? '';
     $category = $_POST['category'] ?? '';
@@ -9,22 +43,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sitesSelected = $_POST['sites'] ?? [];
 
 
-    // handle image upload
+    // handle image upload - ใช้ helper function ที่ปลอดภัยกว่า
     $imagePath = $article['image'] ?? null;
-    if (!empty($_FILES['image']['name'])) {
-        $uploaddir = __DIR__ . '/../uploads/';
-        if (!is_dir($uploaddir)) mkdir($uploaddir, 0755, true);
-        $fname = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', basename($_FILES['image']['name']));
-        $target = $uploaddir . $fname;
-        if (move_uploaded_file($_FILES['image']['tmp_name'], $target)) {
-            $imagePath = $fname;
+    $uploadDir = __DIR__ . '/../uploads';
+
+    $uploadResult = validate_and_move_upload($_FILES['image'] ?? null, $uploadDir);
+
+    if ($uploadResult) {
+        // ลบรูปเก่าหากมีและอัปโหลดรูปใหม่สำเร็จ
+        if ($imagePath) {
+            @unlink($uploadDir . DIRECTORY_SEPARATOR . $imagePath);
         }
+        $imagePath = $uploadResult;
     }
 
 
     if ($editing) {
         $stmt = $pdo->prepare('UPDATE articles SET title=?, content=?, image=?, category=?, tags=?, updated_at=NOW() WHERE id=?');
+        // หมายเหตุ: โค้ดนี้สมมติว่าตาราง articles มีคอลัมน์ category และ tags เป็นข้อความตามที่ฟอร์มใช้
         $stmt->execute([$title, $content, $imagePath, $category, $tags, $id]);
+        
         // update sites
         $pdo->prepare('DELETE FROM article_site WHERE article_id=?')->execute([$id]);
         foreach ($sitesSelected as $sid) {
@@ -34,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     } else {
         $stmt = $pdo->prepare('INSERT INTO articles (title,content,image,category,tags,created_by) VALUES (?,?,?,?,?,?)');
+        // หมายเหตุ: โค้ดนี้สมมติว่าตาราง articles มีคอลัมน์ category และ tags เป็นข้อความตามที่ฟอร์มใช้
         $stmt->execute([$title, $content, $imagePath, $category, $tags, current_user()['id']]);
         $articleId = $pdo->lastInsertId();
         foreach ($sitesSelected as $sid) {
@@ -58,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label>Title: <input name="title" value="<?php echo e($article['title']); ?>" required></label><br>
         <label>Category: <input name="category" value="<?php echo e($article['category']); ?>"></label><br>
         <label>Tags (comma): <input name="tags" value="<?php echo e($article['tags']); ?>"></label><br>
+        
         <label>Image: <input type="file" name="image"></label>
         <?php if (!empty($article['image'])): ?>
             <div>Current: <img src="<?php echo e($config['BASE_URL'] . 'uploads/' . basename($article['image'])); ?>" width="120"></div>
@@ -67,9 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <textarea name="content" rows="12" cols="80"><?php echo e($article['content']); ?></textarea></label><br>
 
         <input type="hidden" name="csrf" value="<?php echo e(csrf_token()); ?>">
-        <select name="category"> ... </select>
-        <select name="tags[]" multiple> ... </select>
-        <textarea id="content" name="content">...</textarea>
+        
+        <textarea id="content" name="content" style="display:none;"><?php echo e($article['content']); ?></textarea>
         <script>
             if (typeof tinymce !== 'undefined') {
                 tinymce.init({
