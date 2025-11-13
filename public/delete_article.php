@@ -12,4 +12,4 @@ if ($id) {
     }
     $pdo->prepare('DELETE FROM articles WHERE id = ?')->execute([$id]);
 }
-header('Location: articles_list.php');
+header('Location: articles_list');

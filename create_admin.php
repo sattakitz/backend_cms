@@ -27,7 +27,7 @@ if (isset($_GET['run'])) {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare('INSERT INTO users (username,password,role) VALUES (?,?,"admin")');
             $stmt->execute([$username, $hash]);
-            echo 'Admin created. <a href="public/login.php">Go to login</a>';
+            echo 'Admin created. <a href="public/login">Go to login</a>';
             exit;
         }
     }
